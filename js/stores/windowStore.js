@@ -188,7 +188,7 @@ const newFrame = (state, frameOpts) => {
   if (openInForeground) {
     const tabId = frameOpts.tabId
     const frame = frameStateUtil.getFrameByTabId(state, tabId)
-    state = frameStateUtil.updateTabPageIndex(state, frame)
+    state = frameStateUtil.updateTabPageIndex(state, tabId)
     if (active) {
       // only set the activeFrameKey if the tab is already active
       state = state.set('activeFrameKey', frame.get('key'))
@@ -230,6 +230,18 @@ const frameGuestInstanceIdChanged = (state, action) => {
   })
 }
 
+function handleChangeSettingAction (state, settingKey, settingValue) {
+  switch (settingKey) {
+    case settings.TABS_PER_PAGE:
+      const activeFrame = frameStateUtil.getActiveFrame(state)
+      state = frameStateUtil.updateTabPageIndex(state, activeFrame.get('tabId'), settingValue)
+      break
+    default:
+  }
+
+  return state
+}
+
 const windowStore = new WindowStore()
 const emitChanges = debounce(windowStore.emitChanges.bind(windowStore), 5)
 
@@ -248,7 +260,8 @@ const applyReducers = (state, action, immutableAction) => [
 const immediatelyEmittedActions = [
   windowConstants.WINDOW_SET_NAVBAR_INPUT,
   windowConstants.WINDOW_SET_FIND_DETAIL,
-  windowConstants.WINDOW_SET_BOOKMARK_DETAIL,
+  windowConstants.WINDOW_ON_ADD_BOOKMARK,
+  windowConstants.WINDOW_ON_EDIT_BOOKMARK,
   windowConstants.WINDOW_AUTOFILL_POPUP_HIDDEN,
   windowConstants.WINDOW_SET_CONTEXT_MENU_DETAIL,
   windowConstants.WINDOW_SET_POPUP_WINDOW_DETAIL,
@@ -366,7 +379,7 @@ const doAction = (action) => {
         windowState = windowState.setIn(['ui', 'tabs', 'tabPageIndex'], action.index)
         windowState = windowState.deleteIn(['ui', 'tabs', 'previewTabPageIndex'])
       } else {
-        windowState = frameStateUtil.updateTabPageIndex(windowState, action.frameProps)
+        windowState = frameStateUtil.updateTabPageIndex(windowState, action.frameProps.get('tabId'))
       }
       break
     case windowConstants.WINDOW_SET_TAB_BREAKPOINT:
@@ -394,6 +407,7 @@ const doAction = (action) => {
       {
         const sourceFrameProps = frameStateUtil.getFrameByKey(windowState, action.sourceFrameKey)
         const sourceFrameIndex = frameStateUtil.getFrameIndex(windowState, action.sourceFrameKey)
+        const activeFrame = frameStateUtil.getActiveFrame(windowState)
         let newIndex = frameStateUtil.getFrameIndex(windowState, action.destinationFrameKey) + (action.prepend ? 0 : 1)
         let frames = frameStateUtil.getFrames(windowState).splice(sourceFrameIndex, 1)
         if (newIndex > sourceFrameIndex) {
@@ -403,7 +417,7 @@ const doAction = (action) => {
         windowState = windowState.set('frames', frames)
         // Since the tab could have changed pages, update the tab page as well
         windowState = frameStateUtil.updateFramesInternalIndex(windowState, Math.min(sourceFrameIndex, newIndex))
-        windowState = frameStateUtil.updateTabPageIndex(windowState, frameStateUtil.getActiveFrame(windowState))
+        windowState = frameStateUtil.updateTabPageIndex(windowState, activeFrame.get('tabId'))
         break
       }
     case windowConstants.WINDOW_SET_LINK_HOVER_PREVIEW:
@@ -443,17 +457,47 @@ const doAction = (action) => {
         }
         break
       }
-    case windowConstants.WINDOW_SET_BOOKMARK_DETAIL:
-      if (!action.currentDetail && !action.originalDetail) {
-        windowState = windowState.delete('bookmarkDetail')
-      } else {
-        windowState = windowState.mergeIn(['bookmarkDetail'], {
-          currentDetail: action.currentDetail,
-          originalDetail: action.originalDetail,
-          destinationDetail: action.destinationDetail,
-          shouldShowLocation: action.shouldShowLocation,
-          isBookmarkHanger: action.isBookmarkHanger
-        })
+    case windowConstants.WINDOW_ON_ADD_BOOKMARK:
+      windowState = windowState.setIn(['bookmarkDetail'], Immutable.fromJS({
+        siteDetail: action.siteDetail,
+        isBookmarkHanger: false,
+        closestKey: action.closestKey
+      }))
+      break
+    case windowConstants.WINDOW_ON_BOOKMARK_CLOSE:
+      windowState = windowState.delete('bookmarkDetail')
+      break
+    case windowConstants.WINDOW_ON_EDIT_BOOKMARK:
+      const siteDetail = appStoreRenderer.state.getIn(['sites', action.editKey])
+
+      windowState = windowState.setIn(['bookmarkDetail'], Immutable.fromJS({
+        siteDetail: siteDetail,
+        editKey: action.editKey,
+        isBookmarkHanger: action.isHanger
+      }))
+      break
+    case windowConstants.WINDOW_ON_BOOKMARK_ADDED:
+      {
+        let editKey = action.editKey
+        const site = appStoreRenderer.state.getIn(['sites', editKey])
+        let siteDetail = action.siteDetail
+
+        if (site) {
+          siteDetail = site
+        }
+
+        if (siteDetail == null) {
+          siteDetail = frameStateUtil.getActiveFrame(windowState)
+        }
+
+        siteDetail = siteDetail.set('location', UrlUtil.getLocationIfPDF(siteDetail.get('location')))
+
+        windowState = windowState.setIn(['bookmarkDetail'], Immutable.fromJS({
+          siteDetail: siteDetail,
+          editKey: editKey,
+          isBookmarkHanger: action.isHanger,
+          isAdded: true
+        }))
       }
       break
     case windowConstants.WINDOW_AUTOFILL_SELECTION_CLICKED:
@@ -712,6 +756,9 @@ const doAction = (action) => {
         action.frameOpts.icon = action.frameOpts.icon || tabValue.get('favIconUrl')
       }
       windowState = newFrame(windowState, action.frameOpts)
+      break
+    case appConstants.APP_CHANGE_SETTING:
+      windowState = handleChangeSettingAction(windowState, action.key, action.value)
       break
     case windowConstants.WINDOW_FRAME_MOUSE_ENTER:
       windowState = windowState.setIn(['ui', 'mouseInFrame'], true)

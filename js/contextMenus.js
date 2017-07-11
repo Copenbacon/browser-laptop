@@ -15,14 +15,11 @@ const bookmarkActions = require('./actions/bookmarkActions')
 const appActions = require('./actions/appActions')
 const siteTags = require('./constants/siteTags')
 const electronDownloadItemActions = require('../app/common/constants/electronDownloadItemActions')
-const dragTypes = require('./constants/dragTypes')
 const siteUtil = require('./state/siteUtil')
 const downloadUtil = require('./state/downloadUtil')
 const menuUtil = require('../app/common/lib/menuUtil')
 const urlUtil = require('./lib/urlutil')
 const CommonMenu = require('../app/common/commonMenu')
-const dnd = require('./dnd')
-const dndData = require('./dndData')
 const appStoreRenderer = require('./stores/appStoreRenderer')
 const ipc = require('electron').ipcRenderer
 const locale = require('../js/l10n')
@@ -34,10 +31,8 @@ const {isIntermediateAboutPage, isUrl, aboutUrls} = require('./lib/appUrlUtil')
 const {getBase64FromImageUrl} = require('./lib/imageUtil')
 const urlParse = require('../app/common/urlParse')
 const {getCurrentWindow} = require('../app/renderer/currentWindow')
-const {bookmarksToolbarMode} = require('../app/common/constants/settingsEnums')
 const extensionState = require('../app/common/state/extensionState')
 const extensionActions = require('../app/common/actions/extensionActions')
-const appStore = require('./stores/appStoreRenderer')
 const {makeImmutable} = require('../app/common/state/immutableUtil')
 
 const isDarwin = process.platform === 'darwin'
@@ -45,21 +40,28 @@ const isLinux = process.platform === 'linux'
 
 /**
  * Obtains an add bookmark menu item
- * @param {object} Detail of the bookmark to initialize with
  */
 const addBookmarkMenuItem = (label, siteDetail, closestDestinationDetail, isParent) => {
   return {
     label: locale.translation(label),
     accelerator: 'CmdOrCtrl+D',
     click: () => {
-      if (isParent) {
-        siteDetail = siteDetail.set('parentFolderId', closestDestinationDetail && (closestDestinationDetail.get('folderId') || closestDestinationDetail.get('parentFolderId')))
+      let closestKey = null
+
+      if (closestDestinationDetail) {
+        closestKey = siteUtil.getSiteKey(closestDestinationDetail)
+
+        if (isParent) {
+          siteDetail = siteDetail.set('parentFolderId', (closestDestinationDetail.get('folderId') || closestDestinationDetail.get('parentFolderId')))
+        }
       }
+
       if (siteDetail.constructor !== Immutable.Map) {
         siteDetail = Immutable.fromJS(siteDetail)
       }
+
       siteDetail = siteDetail.set('location', urlUtil.getLocationIfPDF(siteDetail.get('location')))
-      windowActions.setBookmarkDetail(siteDetail, siteDetail, closestDestinationDetail, true)
+      windowActions.addBookmark(siteDetail, closestKey)
     }
   }
 }
@@ -68,42 +70,20 @@ const addFolderMenuItem = (closestDestinationDetail, isParent) => {
   return {
     label: locale.translation('addFolder'),
     click: () => {
-      let emptyFolder = Immutable.fromJS({ tags: [siteTags.BOOKMARK_FOLDER] })
-      if (isParent) {
-        emptyFolder = emptyFolder.set('parentFolderId', closestDestinationDetail && (closestDestinationDetail.get('folderId') || closestDestinationDetail.get('parentFolderId')))
+      let siteDetail = Immutable.fromJS({ tags: [siteTags.BOOKMARK_FOLDER] })
+      let closestKey = null
+
+      if (closestDestinationDetail) {
+        closestKey = siteUtil.getSiteKey(closestDestinationDetail)
+
+        if (isParent) {
+          siteDetail = siteDetail.set('parentFolderId', (closestDestinationDetail.get('folderId') || closestDestinationDetail.get('parentFolderId')))
+        }
       }
-      windowActions.setBookmarkDetail(emptyFolder, undefined, closestDestinationDetail, false)
+
+      windowActions.addBookmark(siteDetail, closestKey)
     }
   }
-}
-
-function tabPageTemplateInit (framePropsList) {
-  return [{
-    label: locale.translation('unmuteTabs'),
-    click: () => {
-      windowActions.muteAllAudio(generateMuteFrameList(framePropsList, false))
-    }
-  }, {
-    label: locale.translation('muteTabs'),
-    click: () => {
-      windowActions.muteAllAudio(generateMuteFrameList(framePropsList, true))
-    }
-  }, {
-    label: locale.translation('closeTabPage'),
-    click: () => {
-      windowActions.closeFrames(framePropsList)
-    }
-  }]
-}
-
-function generateMuteFrameList (framePropsList, muted) {
-  return framePropsList.map((frameProp) => {
-    return {
-      frameKey: frameProp.get('key'),
-      tabId: frameProp.get('tabId'),
-      muted: muted && frameProp.get('audioPlaybackActive') && !frameProp.get('audioMuted')
-    }
-  })
 }
 
 function urlBarTemplateInit (searchDetail, activeFrame, e) {
@@ -324,7 +304,10 @@ function siteDetailTemplateInit (siteDetail, activeFrame) {
       template.push(
         {
           label: locale.translation(isFolder ? 'editFolder' : 'editBookmark'),
-          click: () => windowActions.setBookmarkDetail(siteDetail, siteDetail, null, true)
+          click: () => {
+            const editKey = siteUtil.getSiteKey(siteDetail)
+            windowActions.editBookmark(false, editKey)
+          }
         },
         CommonMenu.separatorMenuItem)
     }
@@ -351,95 +334,6 @@ function siteDetailTemplateInit (siteDetail, activeFrame) {
       addFolderMenuItem(siteDetail, true))
   }
 
-  return menuUtil.sanitizeTemplateItems(template)
-}
-
-function showBookmarkFolderInit (allBookmarkItems, parentBookmarkFolder, activeFrame) {
-  const items = siteUtil.filterSitesRelativeTo(allBookmarkItems, parentBookmarkFolder)
-  if (items.size === 0) {
-    return [{
-      l10nLabelId: 'emptyFolderItem',
-      enabled: false,
-      dragOver: function (e) {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-      },
-      drop (e) {
-        e.preventDefault()
-        const bookmark = dnd.prepareBookmarkDataFromCompatible(e.dataTransfer)
-        if (bookmark) {
-          const bookmarkSiteKey = siteUtil.getSiteKey(bookmark)
-          const parentBookmarkFolderKey = siteUtil.getSiteKey(parentBookmarkFolder)
-          appActions.moveSite(bookmarkSiteKey, parentBookmarkFolderKey, false, true)
-        }
-      }
-    }]
-  }
-  return bookmarkItemsInit(allBookmarkItems, items, activeFrame)
-}
-
-function bookmarkItemsInit (allBookmarkItems, items, activeFrame) {
-  const btbMode = getSetting(settings.BOOKMARKS_TOOLBAR_MODE)
-  const showFavicon = (btbMode === bookmarksToolbarMode.TEXT_AND_FAVICONS || btbMode === bookmarksToolbarMode.FAVICONS_ONLY)
-  const itemsList = items.toList()
-  const template = itemsList.map((site) => {
-    const isFolder = siteUtil.isFolder(site)
-    let faIcon
-    if (showFavicon && !site.get('favicon')) {
-      faIcon = isFolder ? 'fa-folder-o' : 'fa-file-o'
-    }
-    const templateItem = {
-      bookmark: site,
-      draggable: true,
-      label: site.get('customTitle') || site.get('title') || site.get('location'),
-      icon: showFavicon ? site.get('favicon') : undefined,
-      faIcon,
-      contextMenu: function (e) {
-        onSiteDetailContextMenu(site, activeFrame, e)
-      },
-      dragEnd: function (e) {
-        dnd.onDragEnd(dragTypes.BOOKMARK, site, e)
-      },
-      dragStart: function (e) {
-        dnd.onDragStart(dragTypes.BOOKMARK, site, e)
-      },
-      dragOver: function (e) {
-        e.preventDefault()
-        e.dataTransfer.dropEffect = 'move'
-      },
-      drop: function (e) {
-        e.preventDefault()
-        const bookmarkItem = dnd.prepareBookmarkDataFromCompatible(e.dataTransfer)
-        if (bookmarkItem) {
-          const bookmarkItemSiteKey = siteUtil.getSiteKey(bookmarkItem)
-          const siteKey = siteUtil.getSiteKey(site)
-
-          appActions.moveSite(bookmarkItemSiteKey, siteKey, dndData.shouldPrependVerticalItem(e.target, e.clientY))
-        }
-      },
-      click: function (e) {
-        bookmarkActions.clickBookmarkItem(allBookmarkItems, site, activeFrame, e)
-      }
-    }
-    if (isFolder) {
-      templateItem.submenu = showBookmarkFolderInit(allBookmarkItems, site, activeFrame)
-    }
-    return templateItem
-  }).toJS()
-  return menuUtil.sanitizeTemplateItems(template)
-}
-
-function moreBookmarksTemplateInit (allBookmarkItems, bookmarks, activeFrame) {
-  const template = bookmarkItemsInit(allBookmarkItems, bookmarks, activeFrame)
-  template.push({
-    l10nLabelId: 'moreBookmarks',
-    click: function () {
-      appActions.createTabRequested({
-        url: 'about:bookmarks'
-      })
-      windowActions.setContextMenuDetail()
-    }
-  })
   return menuUtil.sanitizeTemplateItems(template)
 }
 
@@ -1217,7 +1111,7 @@ function mainTemplateInit (nodeProps, frame, tab) {
 
   const extensionContextMenus = isPrivate
     ? undefined
-    : extensionState.getContextMenusProperties(appStore.state)
+    : extensionState.getContextMenusProperties(appStoreRenderer.state)
   if (extensionContextMenus !== undefined &&
     extensionContextMenus.length) {
     template.push(CommonMenu.separatorMenuItem)
@@ -1378,12 +1272,6 @@ function onDownloadsToolbarContextMenu (downloadId, downloadItem, e) {
   downloadsToolbarMenu.popup(getCurrentWindow())
 }
 
-function onTabPageContextMenu (framePropsList, e) {
-  e.stopPropagation()
-  const tabPageMenu = Menu.buildFromTemplate(tabPageTemplateInit(framePropsList))
-  tabPageMenu.popup(getCurrentWindow())
-}
-
 function onUrlBarContextMenu (e) {
   e.stopPropagation()
   const searchDetail = appStoreRenderer.state.get('searchDetail')
@@ -1422,20 +1310,6 @@ function onLedgerContextMenu (location, hostPattern) {
   menu.popup(getCurrentWindow())
 }
 
-function onShowBookmarkFolderMenu (bookmarks, bookmark, activeFrame, e) {
-  if (e && e.stopPropagation) {
-    e.stopPropagation()
-  }
-  const menuTemplate = showBookmarkFolderInit(bookmarks, bookmark, activeFrame)
-  const rectLeft = e.target.getBoundingClientRect()
-  const rectBottom = e.target.parentNode.getBoundingClientRect()
-  windowActions.setContextMenuDetail(Immutable.fromJS({
-    left: (rectLeft.left | 0) - 2,
-    top: (rectBottom.bottom | 0) - 1,
-    template: menuTemplate
-  }))
-}
-
 function onShowAutofillMenu (suggestions, targetRect, frame, boundingClientRect) {
   const menuTemplate = autofillTemplateInit(suggestions, frame)
   // toolbar UI scale ratio
@@ -1451,17 +1325,7 @@ function onShowAutofillMenu (suggestions, targetRect, frame, boundingClientRect)
   }))
 }
 
-function onMoreBookmarksMenu (activeFrame, allBookmarkItems, overflowItems, e) {
-  const menuTemplate = moreBookmarksTemplateInit(allBookmarkItems, overflowItems, activeFrame)
-  const rect = e.target.getBoundingClientRect()
-  windowActions.setContextMenuDetail(Immutable.fromJS({
-    right: 0,
-    top: rect.bottom,
-    template: menuTemplate
-  }))
-}
-
-function onReloadContextMenu (target) {
+function onReloadContextMenu () {
   const menuTemplate = [
     CommonMenu.reloadPageMenuItem(),
     CommonMenu.cleanReloadMenuItem()
@@ -1478,12 +1342,9 @@ module.exports = {
   onNewTabContextMenu,
   onTabsToolbarContextMenu,
   onDownloadsToolbarContextMenu,
-  onTabPageContextMenu,
   onUrlBarContextMenu,
   onFindBarContextMenu,
   onSiteDetailContextMenu,
-  onShowBookmarkFolderMenu,
   onShowAutofillMenu,
-  onMoreBookmarksMenu,
   onReloadContextMenu
 }

@@ -394,6 +394,7 @@ const handleAppAction = (action) => {
       require('../../app/browser/reducers/tabsReducer'),
       require('../../app/browser/reducers/sitesReducer'),
       require('../../app/browser/reducers/windowsReducer'),
+      require('../../app/browser/reducers/syncReducer'),
       require('../../app/browser/reducers/spellCheckReducer'),
       require('../../app/browser/reducers/clipboardReducer'),
       require('../../app/browser/reducers/urlBarSuggestionsReducer'),
@@ -450,6 +451,8 @@ const handleAppAction = (action) => {
       nativeImage.copyDataURL(action.dataURL, action.html, action.text)
       break
     case appConstants.APP_ADD_SITE:
+    case appConstants.APP_ADD_BOOKMARK:
+    case appConstants.APP_EDIT_BOOKMARK:
       const oldSiteSize = appState.get('sites').size
       appState = aboutNewTabState.setSites(appState, action)
       appState = aboutHistoryState.setHistory(appState, action)

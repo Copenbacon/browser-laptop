@@ -10,6 +10,7 @@ const Immutable = require('immutable')
 const appConstants = require('../../../js/constants/appConstants')
 const windowConstants = require('../../../js/constants/windowConstants')
 const config = require('../../../js/constants/config')
+const siteTags = require('../../../js/constants/siteTags')
 
 // Actions
 const appActions = require('../../../js/actions/appActions')
@@ -19,6 +20,7 @@ const frameStateUtil = require('../../../js/state/frameStateUtil')
 const {getCurrentWindowId} = require('../currentWindow')
 const {getSourceAboutUrl, getSourceMagnetUrl} = require('../../../js/lib/appUrlUtil')
 const {isURL, isPotentialPhishingUrl, getUrlFromInput} = require('../../../js/lib/urlutil')
+const siteUtil = require('../../../js/state/siteUtil')
 
 const setFullScreen = (state, action) => {
   const index = frameStateUtil.getIndexByTabId(state, action.tabId)
@@ -35,7 +37,7 @@ const closeFrame = (state, action) => {
   }
 
   const frameProps = frameStateUtil.getFrameByKey(state, action.frameKey)
-  const hoverState = state.getIn(['frames', index, 'hoverState'])
+  const hoverState = frameStateUtil.getTabHoverState(state, action.frameKey)
 
   state = state.merge(frameStateUtil.removeFrame(
     state,
@@ -117,10 +119,11 @@ const frameReducer = (state, action, immutableAction) => {
 
       // TODO fix race condition in Muon more info in #9000
       const active = immutableAction.getIn(['tabValue', 'active'])
+      const hasTabInHoverState = state.getIn(['ui', 'tabs', 'hoverTabIndex'])
       if (active != null) {
         if (active) {
           state = state.set('activeFrameKey', frame.get('key'))
-          if (frame.get('hoverState')) {
+          if (hasTabInHoverState != null) {
             state = state.set('previewFrameKey', null)
           }
           if (frame.getIn(['ui', 'tabs', 'hoverTabPageIndex']) == null) {
@@ -128,7 +131,7 @@ const frameReducer = (state, action, immutableAction) => {
           }
           state = state.setIn(['frames', index, 'lastAccessedTime'], new Date().getTime())
 
-          state = frameStateUtil.updateTabPageIndex(state, frame)
+          state = frameStateUtil.updateTabPageIndex(state, tabId)
         }
       }
       break
@@ -205,6 +208,17 @@ const frameReducer = (state, action, immutableAction) => {
     case windowConstants.WINDOW_SET_FULL_SCREEN:
       state = setFullScreen(state, action)
       break
+
+    case windowConstants.WINDOW_ON_FRAME_BOOKMARK:
+      {
+        // TODO make this an appAction that gets the bookmark data from tabState
+        const frameProps = frameStateUtil.getFrameByTabId(state, action.tabId)
+        if (frameProps) {
+          const bookmark = siteUtil.getDetailFromFrame(frameProps, siteTags.BOOKMARK)
+          appActions.addSite(bookmark, siteTags.BOOKMARK)
+        }
+        break
+      }
   }
 
   return state

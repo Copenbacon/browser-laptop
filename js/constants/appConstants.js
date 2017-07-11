@@ -97,6 +97,8 @@ const appConstants = {
   APP_TAB_CLONED: _,
   APP_SET_OBJECT_ID: _,
   APP_CREATE_SYNC_CACHE: _,
+  APP_PENDING_SYNC_RECORDS_ADDED: _,
+  APP_PENDING_SYNC_RECORDS_REMOVED: _,
   APP_SAVE_SYNC_DEVICES: _,
   APP_SAVE_SYNC_INIT_DATA: _,
   APP_RESET_SYNC_DATA: _,
@@ -137,7 +139,9 @@ const appConstants = {
   APP_ON_CANCEL_BROWSING_DATA: _,
   APP_SET_SKIP_SYNC: _,
   APP_SWIPE_LEFT: _,
-  APP_SWIPE_RIGHT: _
+  APP_SWIPE_RIGHT: _,
+  APP_ADD_BOOKMARK: _,
+  APP_EDIT_BOOKMARK: _
 }
 
 module.exports = mapValuesByKeys(appConstants)

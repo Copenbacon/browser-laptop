@@ -35,6 +35,8 @@ const frameStateUtil = require('../../../../js/state/frameStateUtil')
 // Utils
 const cx = require('../../../../js/lib/classSet')
 const {getBaseUrl} = require('../../../../js/lib/appUrlUtil')
+const siteUtil = require('../../../../js/state/siteUtil')
+const eventUtil = require('../../../../js/lib/eventUtil')
 const {getSetting} = require('../../../../js/settings')
 const {isDarwin} = require('../../../common/lib/platformUtil')
 const {isFullScreen} = require('../../currentWindow')
@@ -46,21 +48,36 @@ class NavigationBar extends React.Component {
   constructor (props) {
     super(props)
     this.onStop = this.onStop.bind(this)
+    this.onReload = this.onReload.bind(this)
+    this.onReloadLongPress = this.onReloadLongPress.bind(this)
+  }
+
+  onToggleBookmark () {
+    const editing = this.props.isBookmarked
+
+    if (editing) {
+      windowActions.editBookmark(true, this.props.bookmarkKey)
+    } else {
+      windowActions.onBookmarkAdded(true, this.props.bookmarkKey)
+    }
+  }
+
+  onReload (e) {
+    if (eventUtil.isForSecondaryAction(e)) {
+      appActions.tabCloned(this.props.activeTabId, {active: !!e.shiftKey})
+    } else {
+      ipc.emit(messages.SHORTCUT_ACTIVE_FRAME_RELOAD)
+    }
+  }
+
+  onReloadLongPress (target) {
+    contextMenus.onReloadContextMenu(target)
   }
 
   onStop () {
+    // TODO (bridiver) - remove shortcut
     ipc.emit(messages.SHORTCUT_ACTIVE_FRAME_STOP)
-    if (this.props.navbar.getIn(['urlbar', 'focused'])) {
-      windowActions.setUrlBarActive(false)
-      const shouldRenderSuggestions = this.props.navbar.getIn(['urlbar', 'suggestions', 'shouldRender']) === true
-      const suggestionList = this.props.navbar.getIn(['urlbar', 'suggestions', 'suggestionList'])
-      if (!shouldRenderSuggestions ||
-          // TODO: Once we take out suggestion generation from within URLBarSuggestions we can remove this check
-          // and put it in shouldRenderUrlBarSuggestions where it belongs.  See https://github.com/brave/browser-laptop/issues/3151
-          !suggestionList || suggestionList.size === 0) {
-        windowActions.setUrlBarSelected(true)
-      }
-    }
+    windowActions.onStop(this.props.isFocused, this.props.shouldRenderSuggestions)
   }
 
   componentDidMount () {
@@ -109,8 +126,10 @@ class NavigationBar extends React.Component {
     props.showHomeButton = !props.titleMode && getSetting(settings.SHOW_HOME_BUTTON)
 
     // used in other functions
-    props.navbar = navbar // TODO(nejc) remove, primitives only
-    props.sites = state.get('sites') // TODO(nejc) remove, primitives only
+    props.isFocused = navbar.getIn(['urlbar', 'focused'], false)
+    props.shouldRenderSuggestions = navbar.getIn(['urlbar', 'suggestions', 'shouldRender']) === true
+    props.activeTabId = activeTabId
+    props.bookmarkKey = siteUtil.getSiteKey(activeFrame)
     props.showHomeButton = !props.titleMode && getSetting(settings.SHOW_HOME_BUTTON)
 
     props.location = location
@@ -178,10 +197,7 @@ class NavigationBar extends React.Component {
           )
         : null
       }
-      <UrlBar
-        titleMode={this.props.titleMode}
-        onStop={this.onStop}
-        />
+      <UrlBar titleMode={this.props.titleMode} />
       {
         this.props.showPublisherToggle
         ? (

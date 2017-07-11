@@ -171,7 +171,7 @@ Notifies that a tab has been closed
 
 
 
-### addSite(siteDetail, tag, originalSiteDetail, destinationIsParent, skipSync) 
+### addSite(siteDetail, tag, skipSync) 
 
 Adds a site to the site list
 
@@ -180,11 +180,6 @@ Adds a site to the site list
 **siteDetail**: `Object`, Properties of the site in question, can also be an array of siteDetail
 
 **tag**: `string`, A tag to associate with the site. e.g. bookmarks.
-
-**originalSiteDetail**: `string`, If specified, the original site detail to edit / overwrite.
-
-**destinationIsParent**: `boolean`, Whether or not the destinationDetail should be considered the new parent.
-  The details of the old entries will be modified if this is set, otherwise only the tag will be added.
 
 **skipSync**: `boolean`, Set true if a site isn't eligible for Sync (e.g. if addSite was triggered by Sync)
 
@@ -777,6 +772,30 @@ Dispatches a message to set objectId for a syncable object.
 
 
 
+### pendingSyncRecordsAdded(records) 
+
+Add records sent with sync lib's SEND_SYNC_RECORDS to the appState
+records pending upload. After we download records via the sync lib
+we run pendingSyncRecordsRemoved.
+
+**Parameters**
+
+**records**: `Object`, Array.<object>
+
+
+
+### pendingSyncRecordsRemoved(records) 
+
+Remove records from the appState's records pending upload.
+This function is called after we download the records from the sync
+library.
+
+**Parameters**
+
+**records**: `Object`, Array.<object>
+
+
+
 ### saveSyncDevices(devices) 
 
 Dispatch to update sync devices cache.
@@ -930,15 +949,9 @@ Dispatches a message when a tab is being pinned
 
 
 
-### dragEnded(dragType, dragData) 
+### dragEnded() 
 
 Notifies the app that a drag operation stopped from within the app
-
-**Parameters**
-
-**dragType**: `string`, The type of data
-
-**dragData**: `object`, Data being transfered
 
 
 

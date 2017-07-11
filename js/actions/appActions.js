@@ -237,18 +237,13 @@ const appActions = {
    * Adds a site to the site list
    * @param {Object} siteDetail - Properties of the site in question, can also be an array of siteDetail
    * @param {string} tag - A tag to associate with the site. e.g. bookmarks.
-   * @param {string} originalSiteDetail - If specified, the original site detail to edit / overwrite.
-   * @param {boolean} destinationIsParent - Whether or not the destinationDetail should be considered the new parent.
-   *   The details of the old entries will be modified if this is set, otherwise only the tag will be added.
    * @param {boolean} skipSync - Set true if a site isn't eligible for Sync (e.g. if addSite was triggered by Sync)
    */
-  addSite: function (siteDetail, tag, originalSiteDetail, destinationDetail, skipSync) {
+  addSite: function (siteDetail, tag, skipSync) {
     dispatch({
       actionType: appConstants.APP_ADD_SITE,
       siteDetail,
       tag,
-      originalSiteDetail,
-      destinationDetail,
       skipSync
     })
   },
@@ -959,6 +954,32 @@ const appActions = {
   },
 
   /**
+   * Add records sent with sync lib's SEND_SYNC_RECORDS to the appState
+   * records pending upload. After we download records via the sync lib
+   * we run pendingSyncRecordsRemoved.
+   * @param {Object} records Array.<object>
+   */
+  pendingSyncRecordsAdded: function (records) {
+    dispatch({
+      actionType: appConstants.APP_PENDING_SYNC_RECORDS_ADDED,
+      records
+    })
+  },
+
+  /**
+   * Remove records from the appState's records pending upload.
+   * This function is called after we download the records from the sync
+   * library.
+   * @param {Object} records Array.<object>
+   */
+  pendingSyncRecordsRemoved: function (records) {
+    dispatch({
+      actionType: appConstants.APP_PENDING_SYNC_RECORDS_REMOVED,
+      records
+    })
+  },
+
+  /**
    * Dispatch to update sync devices cache.
    * NOTE: deviceId is a string! Normally it's Array.<number> but that can't
    * be an object key. Use syncUtil.deviceIdToString()
@@ -1179,8 +1200,6 @@ const appActions = {
 
   /**
    * Notifies the app that a drag operation stopped from within the app
-   * @param {string} dragType - The type of data
-   * @param {object} dragData - Data being transfered
    */
   dragEnded: function () {
     dispatch({
@@ -1468,6 +1487,24 @@ const appActions = {
     dispatch({
       actionType: appConstants.APP_SWIPE_RIGHT,
       percent
+    })
+  },
+
+  addBookmark: function (siteDetail, tag, closestKey) {
+    dispatch({
+      actionType: appConstants.APP_ADD_BOOKMARK,
+      siteDetail,
+      tag,
+      closestKey
+    })
+  },
+
+  editBookmark: function (siteDetail, editKey, tag) {
+    dispatch({
+      actionType: appConstants.APP_EDIT_BOOKMARK,
+      siteDetail,
+      tag,
+      editKey
     })
   }
 }

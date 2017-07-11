@@ -302,6 +302,12 @@ AppStore
     objectsById: {
       [string of objectId joined by pipes |]: Array.<string> // array key path within appState, so we can do appState.getIn({key path})
     },
+    pendingRecords: { // OrderedMap of unconfirmed (not yet downloaded) sync records.
+      [objectId]: {
+        enqueueTimestamp: number // new Date().getTime() when record was submitted
+        record: object, // Sync record sent with SEND_SYNC_RECORDS
+      }
+    },
     seed: Array.<number>,
     seedQr: string, // data URL of QR code representing the seed
     setupError: string? // indicates that an error occurred during sync setup
@@ -458,7 +464,6 @@ WindowStore
     history: array, // navigation history
     hrefPreview: string, // show hovered link preview
     httpsEverywhere: Object<string, Array<string>>, // map of XML rulesets name to redirected resources
-    hoverState: boolean, // wheter or not tab is being hovered
     icon: string, // favicon url
     isFullScreen: boolean, // true if the frame should be shown as full screen
     isPrivate: boolean, // private browsing tab
@@ -665,6 +670,7 @@ WindowStore
     },
     size: array, // last known window size [x, y]
     tabs: {
+      hoverTabIndex: number, // index of the current hovered tab
       tabPageIndex: number, // index of the current tab page
       previewTabPageIndex: number // index of the tab being previewed
     },
