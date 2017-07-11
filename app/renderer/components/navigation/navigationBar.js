@@ -21,6 +21,7 @@ const PublisherToggle = require('./publisherToggle')
 
 // Actions
 const windowActions = require('../../../../js/actions/windowActions')
+const appActions = require('../../../../js/actions/appActions')
 
 // Constants
 const messages = require('../../../../js/constants/messages')
@@ -38,6 +39,7 @@ const {getBaseUrl} = require('../../../../js/lib/appUrlUtil')
 const siteUtil = require('../../../../js/state/siteUtil')
 const eventUtil = require('../../../../js/lib/eventUtil')
 const {getSetting} = require('../../../../js/settings')
+const contextMenus = require('../../../../js/contextMenus')
 const {isDarwin} = require('../../../common/lib/platformUtil')
 const {isFullScreen} = require('../../currentWindow')
 
